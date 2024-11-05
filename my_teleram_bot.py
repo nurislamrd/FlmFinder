@@ -27,7 +27,7 @@ def get_movies_by_genre(genre_id):
     
     if 'results' in data:
         movies = []
-        for movie in data['results'][:10]:  # Берем только первые 5 фильмов
+        for movie in data['results'][:10]:  # Берем только первые 10 фильмов
             title = movie.get('title')
             if not title:  # Если название на русском отсутствует, берем оригинальное название
                 title = get_original_title(movie['id'])
