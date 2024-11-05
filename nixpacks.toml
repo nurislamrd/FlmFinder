@@ -1,3 +1,10 @@
 [phases.setup]
 language = "python"
-packages = ["python313"]  # Укажите нужную версию Python, например python310
+packages = ["python312"]  # Версия Python, если требуется
+
+[phases.build]
+commands = ["pip install -r requirements.txt"]
+
+[phases.start]
+commands = ["python my_teleram_bot.py"]
+
