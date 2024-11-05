@@ -4,7 +4,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 bot = telebot.TeleBot('7453464704:AAHMk2G38eV72rBZL_8dXc3LWRhxAOn2GfI')
 
-# Твой API-ключ от TMDb
+# Мой API ключ от TMDb
 API_KEY = 'fa1c200dad02012b2c0c58a74376288e'
 
 # Маппинг настроения на жанры TMDb
@@ -27,16 +27,16 @@ def get_movies_by_genre(genre_id):
     
     if 'results' in data:
         movies = []
-        for movie in data['results'][:20]:  # Берем только первые 10 фильмов
+        for movie in data['results'][:20]:  # Берем только первые 20 фильмов
             title = movie.get('title')
-            if not title:  # Если название на русском отсутствует, берем оригинальное название
+            if not title:
                 title = get_original_title(movie['id'])
             movie['title'] = title
             movies.append(movie)
         return movies
     return []
 
-# Функция для получения оригинального названия фильма, если русского нет
+# Функция для получения оригинального названия фильма
 def get_original_title(movie_id):
     url = f'https://api.themoviedb.org/3/movie/{movie_id}?api_key={API_KEY}&language=en-US'
     response = requests.get(url)
@@ -46,17 +46,17 @@ def get_original_title(movie_id):
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Новое приветственное сообщение
     text = (
-        "🎬 *Добро пожаловать в КиноБот!*\n\n"
-        "Я здесь, чтобы помочь вам найти идеальный фильм для любого настроения! Хотите расслабиться с комедией, погрузиться в романтику или испытать острые ощущения от триллера? Я подберу для вас лучшие рекомендации! 💥\n\n"
-        "📌 *Как это работает?*\n"
-        "1️⃣ *Выберите своё настроение* — просто скажите мне, что вам хочется, и я предложу фильмы, которые вам подойдут.\n\n"
-        "2️⃣ *Смотрите трейлеры и читайте описания* — каждый фильм сопровождается рейтингом и кратким описанием, чтобы вам было легче выбрать.\n\n"
-        "3️⃣ *Наслаждайтесь просмотром!* 🍿 — найдите идеальный фильм для уютного вечера или захватывающего киносеанса.\n\n"
+        "🎬 *Добро пожаловать в КиноБот!*\\n\\n"
+        "Я здесь, чтобы помочь вам найти идеальный фильм для любого настроения! Хотите расслабиться с комедией, погрузиться в романтику или испытать острые ощущения от триллера? Я подберу для вас лучшие рекомендации! 💥\\n\\n"
+        "📌 *Как это работает?*\\n"
+        "1️⃣ *Выберите своё настроение* — просто скажите мне, что вам хочется, и я предложу фильмы, которые вам подойдут.\\n\\n"
+        "2️⃣ *Смотрите трейлеры и читайте описания* — каждый фильм сопровождается рейтингом и кратким описанием, чтобы вам было легче выбрать.\\n\\n"
+        "3️⃣ *Наслаждайтесь просмотром!* 🍿 — найдите идеальный фильм для уютного вечера или захватывающего киносеанса.\\n\\n"
         "Нажмите /mood, чтобы выбрать своё настроение и найти фильм, который подарит вам идеальные эмоции!"
     )
     bot.reply_to(message, text, parse_mode="Markdown")
+
 # Обработчик команды /mood
 @bot.message_handler(commands=['mood'])
 def choose_mood(message):
@@ -76,98 +76,70 @@ def mood_selected(call):
         movies = get_movies_by_genre(genre_id)
         user_states[call.message.chat.id] = {
             'mood': mood,
-            'movies': movies
+            'movies': movies,
+            'page': 0  # Добавляем страницу
         }
         
         if movies:
-            show_movies_list(call.message.chat.id, mood, movies)
+            show_movies_list(call.message.chat.id, mood, movies, page=0)
         else:
             bot.send_message(call.message.chat.id, f"Не удалось найти фильмы для настроения *{mood}*.", parse_mode="Markdown")
     else:
         bot.send_message(call.message.chat.id, "Извините, не могу обработать выбранное настроение.")
 
 # Функция для отображения списка фильмов с кнопкой "Назад" к выбору настроения
-def show_movies_list(chat_id, mood, movies):
-    markup = InlineKeyboardMarkup()
+def show_movies_list(chat_id, mood, movies, page=0):
+    start_index = page * 10
+    end_index = start_index + 10
     movie_list = ""
-    for index, movie in enumerate(movies, start=1):
+    markup = InlineKeyboardMarkup()
+
+    for index in range(start_index, min(end_index, len(movies))):
+        movie = movies[index]
         title = movie['title']
         rating = movie['vote_average']
-        movie_list += f"{index}. {title} (Рейтинг: {rating})\n"
+        movie_list += f"{index + 1}. {title} (Рейтинг: {rating})\\n"
         
         # Кнопка для каждого фильма
         button = InlineKeyboardButton(
-            text=f"{index}. {title}",
+            text=f"{index + 1}. {title}",
             callback_data=f"movie_{movie['id']}"
         )
         markup.add(button)
-    
+
+    # Добавляем кнопки для перехода по страницам
+    if end_index < len(movies):
+        next_button = InlineKeyboardButton("➡️ Следующие", callback_data=f"next_page")
+        markup.add(next_button)
+    if page > 0:
+        prev_button = InlineKeyboardButton("⬅️ Назад", callback_data=f"prev_page")
+        markup.add(prev_button)
+
     # Добавляем кнопку "Назад" к выбору настроения
     back_button = InlineKeyboardButton("⬅️ Назад ", callback_data="back_to_mood")
     markup.add(back_button)
     
-    bot.send_message(chat_id, f"Фильмы для настроения *{mood}*:\n\n{movie_list}", parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(chat_id, f"Фильмы для настроения *{mood}*:\\n\\n{movie_list}", parse_mode="Markdown", reply_markup=markup)
 
-# Функция для получения трейлера фильма
-def get_movie_trailer(movie_id):
-    url = f'https://api.themoviedb.org/3/movie/{movie_id}/videos?api_key={API_KEY}&language=ru-RU'
-    response = requests.get(url)
-    data = response.json()
-
-    if 'results' in data:
-        for video in data['results']:
-            if video['type'] == 'Trailer' and video['site'] == 'YouTube':
-                return f"https://www.youtube.com/watch?v={video['key']}"
-    return None
-
-# Обработчик нажатия кнопки фильма
-@bot.callback_query_handler(func=lambda call: call.data.startswith("movie_"))
-def movie_details(call):
-    movie_id = call.data.split("_")[1]
-    url = f'https://api.themoviedb.org/3/movie/{movie_id}?api_key={API_KEY}&language=ru-RU'
-    response = requests.get(url)
-    movie = response.json()
-
-    if movie:
-        title = movie.get('title', get_original_title(movie_id))
-        overview = movie.get('overview', 'Описание недоступно.')
-        rating = movie.get('vote_average', 'N/A')
-        release_date = movie.get('release_date', 'Неизвестно')
-        
-        # Получаем трейлер
-        trailer_url = get_movie_trailer(movie_id)
-        trailer_text = f"\n🎥 [Смотреть трейлер]({trailer_url})" if trailer_url else "\nТрейлер недоступен."
-        
-        # Формируем ответ с подробностями о фильме
-        movie_info = (f"🎬 *{title}*\n\n"
-                      f"📅 Дата выхода: {release_date}\n"
-                      f"⭐ Рейтинг: {rating}\n\n"
-                      f"📖 Описание: {overview}"
-                      f"{trailer_text}")
-
-        # Добавляем кнопку "Назад" к списку фильмов
-        markup = InlineKeyboardMarkup()
-        back_button = InlineKeyboardButton("⬅️ Назад ", callback_data="back_to_movies")
-        markup.add(back_button)
-        
-        bot.send_message(call.message.chat.id, movie_info, parse_mode="Markdown", reply_markup=markup)
-    else:
-        bot.send_message(call.message.chat.id, "Информация о фильме не найдена.")
-
-# Обработчик кнопки "Назад к списку фильмов"
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_movies")
-def back_to_movies(call):
+# Обработчик нажатия кнопки для следующей страницы
+@bot.callback_query_handler(func=lambda call: call.data == "next_page")
+def next_page(call):
     user_data = user_states.get(call.message.chat.id)
     
     if user_data:
-        mood = user_data['mood']
-        movies = user_data['movies']
-        show_movies_list(call.message.chat.id, mood, movies)
-    else:
-        bot.send_message(call.message.chat.id, "Не удалось вернуться к списку фильмов.")
+        user_data['page'] += 1  # Переход на следующую страницу
+        show_movies_list(call.message.chat.id, user_data['mood'], user_data['movies'], page=user_data['page'])
 
-# Обработчик кнопки "Назад к выбору настроения"
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_mood")
-def back_to_mood(call):
-    choose_mood(call.message)  # Возвращаемся к выбору настроения
+# Обработчик нажатия кнопки для предыдущей страницы
+@bot.callback_query_handler(func=lambda call: call.data == "prev_page")
+def prev_page(call):
+    user_data = user_states.get(call.message.chat.id)
+    
+    if user_data and user_data['page'] > 0:
+        user_data['page'] -= 1  # Переход на предыдущую страницу
+        show_movies_list(call.message.chat.id, user_data['mood'], user_data['movies'], page=user_data['page'])
+
+# Остальные функции и обработчики...
+
 bot.polling()
+
