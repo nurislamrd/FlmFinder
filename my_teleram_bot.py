@@ -1,11 +1,32 @@
 import telebot
 import requests
+import sqlite3
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from datetime import datetime
 
 bot = telebot.TeleBot('7453464704:AAHMk2G38eV72rBZL_8dXc3LWRhxAOn2GfI')
 
 # Твой API-ключ от TMDb
 API_KEY = 'fa1c200dad02012b2c0c58a74376288e'
+
+# Создаем или подключаемся к базе данных
+conn = sqlite3.connect('users.db')
+cursor = conn.cursor()
+
+# Создание таблицы пользователей
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        language_code TEXT,
+        first_interaction TEXT,
+        last_interaction TEXT
+    )
+''')
+conn.commit()
+conn.close()
 
 # Маппинг настроения на жанры TMDb
 MOOD_TO_GENRE = {
@@ -15,6 +36,31 @@ MOOD_TO_GENRE = {
     "Романтичное ❤️": 10749, # Романтика
     "Приключенческое 🌍": 12 # Приключения
 }
+def save_user(user):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    user_id = user.id
+    username = user.username
+    first_name = user.first_name
+    last_name = user.last_name
+    language_code = user.language_code
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Проверяем, существует ли уже такой пользователь в базе данных
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    existing_user = cursor.fetchone()
+
+    if existing_user:
+        # Обновляем время последнего взаимодействия
+        cursor.execute("UPDATE users SET last_interaction = ? WHERE user_id = ?", (current_time, user_id))
+    else:
+        # Добавляем нового пользователя
+        cursor.execute("INSERT INTO users (user_id, username, first_name, last_name, language_code, first_interaction, last_interaction) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                       (user_id, username, first_name, last_name, language_code, current_time, current_time))
+
+    conn.commit()
+    conn.close()
 
 # Хранилище состояний пользователей
 user_states = {}
@@ -46,6 +92,8 @@ def get_original_title(movie_id):
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def start(message):
+    # Сохраняем пользователя в базе данных
+    save_user(message.from_user)
     # Новое приветственное сообщение
     text = (
         "🎬 *Добро пожаловать в КиноБот!*\n\n"
@@ -57,6 +105,52 @@ def start(message):
         "Нажмите /mood, чтобы выбрать своё настроение и найти фильм, который подарит вам идеальные эмоции!"
     )
     bot.reply_to(message, text, parse_mode="Markdown")
+
+@bot.message_handler(commands=['users'])
+def list_users(message):
+    users = get_users()
+    total_users = count_users()
+    
+    # Формируем список пользователей
+    user_list = "\n".join([f"ID: {user[0]}, Username: {user[1]}, Name: {user[2]} {user[3]}, Language: {user[4]}" for user in users])
+    
+    response = f"Общее количество пользователей: {total_users}\n\nСписок пользователей:\n{user_list}" if user_list else "Пользователи не найдены."
+    MAX_MESSAGE_LENGTH = 4096  # Максимальная длина сообщения Telegram
+    if len(response) > MAX_MESSAGE_LENGTH:
+        # Разбиваем на части
+        chunks = [response[i:i + MAX_MESSAGE_LENGTH] for i in range(0, len(response), MAX_MESSAGE_LENGTH)]
+        
+        # Отправляем каждую часть по очереди
+        for chunk in chunks:
+            bot.send_message(message.chat.id, chunk)
+    else:
+        # Отправляем всё сразу, если длина меньше ограничения
+        bot.send_message(message.chat.id, response)
+    
+
+def get_users():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT user_id, username, first_name, last_name, language_code FROM users")
+    users = cursor.fetchall()   
+    
+    conn.close()
+    
+    return users
+
+# Функция для подсчета количества пользователей
+def count_users():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    user_count = cursor.fetchone()[0]
+
+    conn.close()
+
+    return user_count
+
 # Обработчик команды /mood
 @bot.message_handler(commands=['mood'])
 def choose_mood(message):
@@ -171,4 +265,3 @@ def back_to_movies(call):
 def back_to_mood(call):
     choose_mood(call.message)  # Возвращаемся к выбору настроения
 bot.polling()
-
