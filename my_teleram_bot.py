@@ -108,36 +108,10 @@ def start(message):
 
 @bot.message_handler(commands=['users'])
 def list_users(message):
-    users = get_users()
-    total_users = count_users()
+    total_users = count_users()  # Подсчет общего количества пользователей
+    response = f"Общее количество пользователей: {total_users}"  # Формирование ответа
+    bot.send_message(message.chat.id, response)  # Отправка сообщения
     
-    # Формируем список пользователей
-    user_list = "\n".join([f"ID: {user[0]}, Username: {user[1]}, Name: {user[2]} {user[3]}, Language: {user[4]}" for user in users])
-    
-    response = f"Общее количество пользователей: {total_users}\n\nСписок пользователей:\n{user_list}" if user_list else "Пользователи не найдены."
-    MAX_MESSAGE_LENGTH = 4096  # Максимальная длина сообщения Telegram
-    if len(response) > MAX_MESSAGE_LENGTH:
-        # Разбиваем на части
-        chunks = [response[i:i + MAX_MESSAGE_LENGTH] for i in range(0, len(response), MAX_MESSAGE_LENGTH)]
-        
-        # Отправляем каждую часть по очереди
-        for chunk in chunks:
-            bot.send_message(message.chat.id, chunk)
-    else:
-        # Отправляем всё сразу, если длина меньше ограничения
-        bot.send_message(message.chat.id, response)
-    
-
-def get_users():
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT user_id, username, first_name, last_name, language_code FROM users")
-    users = cursor.fetchall()   
-    
-    conn.close()
-    
-    return users
 
 # Функция для подсчета количества пользователей
 def count_users():
